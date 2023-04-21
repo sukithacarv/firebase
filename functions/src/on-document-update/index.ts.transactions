@@ -1,0 +1,31 @@
+import * as functions from "firebase-functions";
+import * as sdk from "firebase-admin";
+
+sdk.initializeApp();
+const db = sdk.firestore();
+exports.onReviewUpdate = functions.firestore.document("Reviews/{reviewId}")
+    .onUpdate(async (change) => {
+
+        const data = change.after.data();
+        const previousData = change.before.data();
+        console.log(data);
+        console.log(previousData);
+        if (previousData && data && (previousData.rating != data.rating)) {
+            db.runTransaction(async (tx) => {
+                const documentId = data.restaurant.id as string;
+                const docRef = db.collection("Restaurants").doc(documentId);
+                const restaurantDocument = await tx.get(docRef);
+                const restaurant = restaurantDocument.data();
+                if (restaurantDocument.exists && restaurant) {
+                    const numberOfReviewers = restaurant.numberOfReviewers as number;
+                    const rate = restaurant.rate as number;
+                    const total = rate * numberOfReviewers;
+                    const adjustedTotal = total - previousData.rating + data.rating;
+                    const adjustedRate = adjustedTotal / numberOfReviewers;
+                    tx.set(docRef, { rate: adjustedRate }, { merge: true })
+
+                }
+                console.log(restaurant);
+            });
+        }
+    });
